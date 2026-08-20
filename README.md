@@ -1,5 +1,7 @@
 # dsh-rheostat (滑动变阻器)
 
+English | [中文](README.zh.md)
+
 A session style dial for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): one position in [0, 1] that slides the model's response style between **0 mode** (terse, quiet, minimal) and **1 mode** (expressive, lively, detailed), with a blend in between.
 
 - The user slides the dial with the `/rheostat [<0..1>]` command (bare `/rheostat` reads it).

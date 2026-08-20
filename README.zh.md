@@ -1,5 +1,7 @@
 # dsh-rheostat（滑动变阻器）
 
+[English](README.md) | 中文
+
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的会话风格变阻器：一个 [0, 1] 之间的位置，在 **0 模式**（极简、安静、克制）与 **1 模式**（饱满、生动、详细）之间滑动切换模型的回答风格，中间位置按比例混合。
 
 - 用户用 `/rheostat [<0..1>]` 命令滑动（裸 `/rheostat` 读取）。
