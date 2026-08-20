@@ -7,19 +7,25 @@ A session style dial for [DeepSeek Harness](https://github.com/deepseek-ai/deeps
 - Every request renders a `rheostat:style` prompt section describing the current position and its style instruction.
 - The position is durable per-session state (`rheostat/position` session event, last write wins, default 0.5), so resume and fork restore it.
 
-## Install
+## Install for others
+
+The package is not yet on the npm registry; install it directly from this repository. **Run this outside a pnpm workspace** (npm does not support the `workspace:` protocol):
 
 ```sh
-npm install @deepseek-ai/dsh-rheostat
+mkdir my-dsh-project && cd my-dsh-project
+npm init -y
+npm install github:JohnDoe0827/rheostat
 ```
 
-Mount it in your `cordis.yml`:
+Installation builds the package automatically (`prepare` runs `tsc`). Then mount it in your `cordis.yml`:
 
 ```yaml
 - name: '@deepseek-ai/dsh-rheostat'
 ```
 
 It injects `tools` and `systemPrompt`; the `/rheostat` command activates when a `commands` service is composed.
+
+> **Using the DeepSeek Harness monorepo?** The plugin already ships inside [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness) at `packages/context/rheostat` (pending upstream merge), mounted in the base bundle — nothing to install. If you are on a pnpm workspace, use `pnpm add github:JohnDoe0827/rheostat` instead of npm.
 
 ## Usage
 
@@ -42,15 +48,13 @@ npm run build   # tsc → lib/
 npm test        # vitest: unit + invariant + real-Loader composition + full-loop mock-model
 ```
 
-## Publish to npm
+## Publishing to npm (maintainers)
 
-Requires an npm account with access to the `@deepseek-ai` scope (or republish under your own scope):
+Once an npm account with access to the `@deepseek-ai` scope is available:
 
 ```sh
 npm login
 npm publish
 ```
 
-## Part of the DeepSeek Harness monorepo
-
-This package ships inside [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) at `packages/context/rheostat`, mounted in the base bundle by default. This repository is a standalone mirror for direct use and contribution.
+After publishing, `npm install @deepseek-ai/dsh-rheostat` works anywhere. The upstream merge into `deepseek-ai/deepseek-harness` is tracked in the pull request for `feat/dsh-rheostat`.
