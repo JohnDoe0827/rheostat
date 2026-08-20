@@ -42,13 +42,13 @@ Mode bands: position ≤ 0.25 renders 0 mode · 极简静默; position ≥ 0.75 
 
 ## Same prompt, different positions
 
-One prompt (`你喜欢花生吗` — "Do you like peanuts?"), three dial positions (recorded from a live session):
+One prompt (`你喜欢花生吗` — "Do you like peanuts?"), three dial positions (recorded from a live session). Full responses:
 
-| Position | Mode | Response |
+| Position | Mode | Response (translated) |
 | --- | --- | --- |
-| `0.00` | 0 mode · 极简静默 | 喜欢。 |
-| `0.50` | 0 与 1 之间 · 均衡 | 喜欢。花生这东西朴素又实在：脆、香、耐嚼……你呢，平时怎么吃花生比较多？ |
-| `1.00` | 1 mode · 饱满热烈 | 哈哈，喜欢！而且不是一般的喜欢——花生在我这儿简直是"食材界的六边形战士"……你更喜欢花生的哪种吃法？油炸、水煮、还是磨成酱抹面包？ |
+| `0.00` | 0 mode · 极简静默 | Yes. |
+| `0.50` | 0 与 1 之间 · 均衡 | Yes. Peanuts are plain and solid: crisp, fragrant, chewy — raw ones are crunchy, boiled ones soft, fried ones flaky, each way has its own charm. Salted fried peanuts go with beer, peanut-and-trotter soup for slow-cooking, and peanut butter for spreading on bread. Xu Dishan's essay *The Peanut* puts it well too — dug out of the earth dusty and plain, yet genuinely good and dependable.<br><br>As for the downsides: fried ones are easy to overeat, and allergy sufferers can't touch them; other than that, no complaints. How do you usually eat peanuts? |
+| `1.00` | 1 mode · 饱满热烈 | Haha, I love them! And not just a little — for me, the peanut is basically the "hexagonal all-rounder of the food world," and it deserves a proper shout-out! 🥜<br><br>**Texture first**: raw peanuts are crunchy, boiled ones soft, fried ones flaky, roasted ones fragrant. One tiny bean (strictly speaking, the seed of a legume) can pull off four completely different textures — isn't that amazing?<br><br>**Then flavor**: that nutty oil aroma with a hint of sweetness — the kind of fragrance that keeps you reaching for more. Whether it's the late-night street-stall plate of salted fried peanuts, perfect with beer; the vinegar-soaked peanuts Sichuan diners snack on before hotpot, tangy and appetite-whetting; the rich old-Beijing millet porridge (面茶) topped with crushed peanuts; or the peanut-and-trotter soup southerners slow-cook until it melts in the mouth.<br><br>**And the sentimental bonus**: even Lu Xun wrote about the "falling peanut" — Xu Dishan's school essay *The Peanut* is etched into generations of DNA: "A person should be useful, not merely respectable." A peanut, dug out of the earth dusty and plain, is the real deal — so much character!<br><br>**Even its bad reputation is endearing**: people say peanuts make you fat — please, that's on the frying oil and sugar coating; plain peanuts are a source of good fats and protein, and gym-goers eat peanut butter on purpose. The only real pity is that allergy sufferers have to keep away — and we should respect that, gently.<br><br>So the verdict: **yes, I love them**. On a rainy evening, a plate of freshly roasted peanuts and a pot of hot tea on the table — the night is already half won. 🌰✨<br><br>What about you? Which way do you like your peanuts — fried, boiled, or ground into butter for bread? |
 
 ## Development
 
