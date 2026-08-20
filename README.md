@@ -11,15 +11,13 @@ A session style dial for [DeepSeek Harness](https://github.com/deepseek-ai/deeps
 
 ## Install for others
 
-The package is not yet on the npm registry; install it directly from this repository. **Run this outside a pnpm workspace** (npm does not support the `workspace:` protocol):
+The package is published to the npm registry:
 
 ```sh
-mkdir my-dsh-project && cd my-dsh-project
-npm init -y
-npm install github:JohnDoe0827/rheostat
+npm install @johndoe0827/dsh-rheostat
 ```
 
-Installation builds the package automatically (`prepare` runs `tsc`). Then mount it in your `cordis.yml`:
+**Run this outside a pnpm workspace** (npm does not support the `workspace:` protocol). Then mount it in your `cordis.yml`:
 
 ```yaml
 - name: '@deepseek-ai/dsh-rheostat'
@@ -69,4 +67,4 @@ npm login
 npm publish
 ```
 
-After publishing, `npm install @deepseek-ai/dsh-rheostat` works anywhere. The upstream merge into `deepseek-ai/deepseek-harness` is tracked in the pull request for `feat/dsh-rheostat`.
+After publishing, `npm install @johndoe0827/dsh-rheostat` works anywhere. The upstream merge into `deepseek-ai/deepseek-harness` is tracked in the pull request for `feat/dsh-rheostat`.

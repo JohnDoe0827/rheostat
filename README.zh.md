@@ -11,15 +11,13 @@
 
 ## 别人怎么安装
 
-包尚未发布到 npm registry，请直接从本仓库安装。**在 pnpm workspace 之外运行**（npm 不支持 `workspace:` 协议）：
+包已发布到 npm registry：
 
 ```sh
-mkdir my-dsh-project && cd my-dsh-project
-npm init -y
-npm install github:JohnDoe0827/rheostat
+npm install @johndoe0827/dsh-rheostat
 ```
 
-安装时会自动构建（`prepare` 执行 `tsc`）。然后在 `cordis.yml` 中挂载：
+**在 pnpm workspace 之外运行**（npm 不支持 `workspace:` 协议）。然后在 `cordis.yml` 中挂载：
 
 ```yaml
 - name: '@deepseek-ai/dsh-rheostat'
@@ -69,4 +67,4 @@ npm login
 npm publish
 ```
 
-发布后 `npm install @deepseek-ai/dsh-rheostat` 即可在任何地方使用。合并进 `deepseek-ai/deepseek-harness` 的上游进度见 `feat/dsh-rheostat` 的 pull request。
+发布后 `npm install @johndoe0827/dsh-rheostat` 即可在任何地方使用。合并进 `deepseek-ai/deepseek-harness` 的上游进度见 `feat/dsh-rheostat` 的 pull request。
