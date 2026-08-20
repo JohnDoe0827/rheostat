@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-rheostat",
-  "description": "A session style dial (滑动变阻器) sliding between 0 (terse) and 1 (expressive) with a prompt section, control tools, and a /rheostat command",
+  "description": "A session style dial (\u6ed1\u52a8\u53d8\u963b\u5668) sliding between 0 (terse) and 1 (expressive) with a prompt section, control tools, and a /rheostat command",
   "version": "0.1.0-rc.5",
   "publishConfig": {
     "access": "public"
@@ -58,5 +58,8 @@
     "@types/node": "^26.2.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"
+  },
+  "scripts": {
+    "prepare": "tsc -p tsconfig.json"
   }
 }
