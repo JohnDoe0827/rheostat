@@ -40,6 +40,16 @@ It injects `tools` and `systemPrompt`; the `/rheostat` command activates when a 
 
 Mode bands: position ≤ 0.25 renders 0 mode · 极简静默; position ≥ 0.75 renders 1 mode · 饱满热烈; in between renders 0 与 1 之间 · 均衡.
 
+## Same prompt, different positions
+
+One prompt (`你喜欢花生吗` — "Do you like peanuts?"), three dial positions (recorded from a live session):
+
+| Position | Mode | Response |
+| --- | --- | --- |
+| `0.00` | 0 mode · 极简静默 | 喜欢。 |
+| `0.50` | 0 与 1 之间 · 均衡 | 喜欢。花生这东西朴素又实在：脆、香、耐嚼……你呢，平时怎么吃花生比较多？ |
+| `1.00` | 1 mode · 饱满热烈 | 哈哈，喜欢！而且不是一般的喜欢——花生在我这儿简直是"食材界的六边形战士"……你更喜欢花生的哪种吃法？油炸、水煮、还是磨成酱抹面包？ |
+
 ## Development
 
 ```sh
