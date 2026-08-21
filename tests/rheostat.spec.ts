@@ -198,6 +198,15 @@ describe('style dial state', () => {
     session.append('turn/end', { turn: 0, reason: { kind: 'completed' } })
     expect(rheostat.hasOpenTurn(session.events)).toBe(false)
   })
+
+  it('folds the on/off state, defaulting to on and last-write-wins', () => {
+    const session = Session.create(SessionId('fold-active'))
+    expect(rheostat.foldActive(session.events)).toBe(true)
+    session.append('rheostat/active', { active: false })
+    expect(rheostat.foldActive(session.events)).toBe(false)
+    session.append('rheostat/active', { active: true })
+    expect(rheostat.foldActive(session.events)).toBe(true)
+  })
 })
 
 describe('prompt section', () => {
@@ -263,6 +272,38 @@ describe('dsh-rheostat tools', () => {
     expect(positions(agent.session)).toEqual([0.8])
   })
 
+  it('rheostat_set turns the dial on when it was off', async () => {
+    const ctx = await setup()
+    const agent = await agentWithSession(ctx, 'setter-reenable')
+    agent.session.append('rheostat/active', { active: false })
+    const result = await ctx.tools.execute({
+      signal: testSignal,
+      callId: CallId('set-on'),
+      name: rheostat.RHEOSTAT_SET,
+      arguments: { position: 0.2 },
+      agent,
+    })
+    expect(result.isError).toBe(false)
+    expect(agent.session.events.some(e => e.type === 'rheostat/active' && e.data.active)).toBe(true)
+  })
+
+  it('rheostat_get reports the off state', async () => {
+    const ctx = await setup()
+    const agent = await agentWithSession(ctx, 'getter-off')
+    agent.session.append('rheostat/active', { active: false })
+    const result = await ctx.tools.execute({
+      signal: testSignal,
+      callId: CallId('get-off'),
+      name: rheostat.RHEOSTAT_GET,
+      arguments: {},
+      agent,
+    })
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected rheostat_get success')
+    expect(result.value).toEqual({ active: false, position: rheostat.DEFAULT_POSITION, mode: 'balanced' })
+    expect(text(result)).toContain('off')
+  })
+
   it('rejects an out-of-range slide as an isError result without touching the log', async () => {
     const ctx = await setup()
     const agent = await agentWithSession(ctx, 'bad-setter')
@@ -304,7 +345,7 @@ describe('dsh-rheostat tools', () => {
     })
     expect(before.isError).toBe(false)
     if (before.isError) throw new Error('expected rheostat_get success')
-    expect(before.value).toEqual({ position: rheostat.DEFAULT_POSITION, mode: 'balanced' })
+    expect(before.value).toEqual({ active: true, position: rheostat.DEFAULT_POSITION, mode: 'balanced' })
 
     agent.session.append('rheostat/position', { position: 0 })
     const after = await ctx.tools.execute({
@@ -315,7 +356,7 @@ describe('dsh-rheostat tools', () => {
       agent,
     })
     if (after.isError) throw new Error('expected rheostat_get success')
-    expect(after.value).toEqual({ position: 0, mode: 'terse' })
+    expect(after.value).toEqual({ active: true, position: 0, mode: 'terse' })
   })
 
   it('presents the calls with stable titles', async () => {
@@ -335,7 +376,7 @@ describe('/rheostat', () => {
     const ctx = await setupWithCommands()
     const agent = await agentWithSession(ctx, 'command-list')
     expect(ctx.commands.list(agent)).toEqual([
-      { name: 'rheostat', description: 'Slide the style dial (滑动变阻器) between 0 (terse) and 1 (expressive)', input: { hint: '[0..1]' } },
+      { name: 'rheostat', description: 'Turn the style dial (滑动变阻器) off/on or slide it between 0 (terse) and 1 (expressive)', input: { hint: '[off|on|<0..1>]' } },
     ])
   })
 
@@ -345,7 +386,7 @@ describe('/rheostat', () => {
     const result = await ctx.commands.execute(agent, '/rheostat', [], testSignal)
     expect(result?.result).toEqual({
       kind: 'success',
-      text: 'Style dial (滑动变阻器) at 0.50 — 0 与 1 之间 · 均衡. Use /rheostat <0..1> to slide it.',
+      text: 'Style dial (滑动变阻器) at 0.50 — 0 与 1 之间 · 均衡. Use /rheostat <0..1> to slide it, /rheostat off to turn it off.',
     })
   })
 
@@ -410,6 +451,47 @@ describe('/rheostat', () => {
     await boundary(ctx, agent, 'step-start')
     expect(positions(agent.session)).toEqual([0])
     expect(pluginNotices(agent.session)).toEqual(['用户把风格变阻器（滑动变阻器）滑动到了 0.00（0 模式 · 极简静默）。'])
+  })
+
+  it('turns the dial off with /rheostat off and empties the prompt section', async () => {
+    const ctx = await setupWithCommands()
+    const agent = await agentWithSession(ctx, 'command-off')
+    const result = await ctx.commands.execute(agent, '/rheostat off', [], testSignal)
+    expect(result?.result).toEqual({ kind: 'success', text: 'Style dial turned off.' })
+    expect(agent.session.events.some(e => e.type === 'rheostat/active' && !e.data.active)).toBe(true)
+    const assembled = await assembleFor(ctx, agent)
+    expect(assembled.sections.find(s => s.name === rheostat.SECTION_NAME)?.text).toBe('')
+    expect(pluginNotices(agent.session)).toEqual(['用户关闭了风格变阻器（滑动变阻器）。'])
+  })
+
+  it('reports off on a bare /rheostat and is idempotent on /rheostat off', async () => {
+    const ctx = await setupWithCommands()
+    const agent = await agentWithSession(ctx, 'command-off-read')
+    await ctx.commands.execute(agent, '/rheostat off', [], testSignal)
+    const read = await ctx.commands.execute(agent, '/rheostat', [], testSignal)
+    expect(read?.result).toEqual({
+      kind: 'success',
+      text: 'Style dial (滑动变阻器) is off. Use /rheostat <0..1> or /rheostat on to turn it on.',
+    })
+    const again = await ctx.commands.execute(agent, '/rheostat off', [], testSignal)
+    expect(again?.result).toEqual({ kind: 'success', text: 'Style dial is already off.' })
+  })
+
+  it('slides or /rheostat on re-enable an off dial', async () => {
+    const ctx = await setupWithCommands()
+    const off = await agentWithSession(ctx, 'command-reenable-slide')
+    off.session.append('rheostat/active', { active: false })
+    await ctx.commands.execute(off, '/rheostat 0.8', [], testSignal)
+    expect(off.session.events.some(e => e.type === 'rheostat/active' && e.data.active)).toBe(true)
+
+    const on = await agentWithSession(ctx, 'command-reenable-on')
+    on.session.append('rheostat/active', { active: false })
+    const result = await ctx.commands.execute(on, '/rheostat on', [], testSignal)
+    expect(result?.result).toEqual({
+      kind: 'success',
+      text: `Style dial turned on at ${rheostat.DEFAULT_POSITION.toFixed(2)} — ${rheostat.modeLabel(rheostat.DEFAULT_POSITION)}.`,
+    })
+    expect(pluginNotices(on.session)).toEqual(['用户开启了风格变阻器（滑动变阻器），位置 0.50（0 与 1 之间 · 均衡）。'])
   })
 
   it('a later /rheostat replaces an earlier queued selection, and a selection matching the committed position cancels silently', async () => {

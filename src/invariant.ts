@@ -22,10 +22,18 @@ function validatePosition(value: unknown, fail: InvariantFailure): void {
   }
 }
 
+/** Validate one on/off snapshot: the payload must be a boolean. */
+function validateActive(value: unknown, fail: InvariantFailure): void {
+  if (typeof value !== 'boolean') {
+    fail(`rheostat/active must carry a boolean, got ${String(value)}`)
+  }
+}
+
 /* jscpd:ignore-start -- package companions share replay and dispatch plumbing */
 /** Validate the package-owned event fields and ignore unrelated events. */
 function validateEvent(event: SessionEvent, fail: InvariantFailure): void {
   if (event.type === 'rheostat/position') validatePosition(event.data.position, fail)
+  if (event.type === 'rheostat/active') validateActive(event.data.active, fail)
 }
 
 /** Install validation for loaded and newly appended style-dial snapshots. */

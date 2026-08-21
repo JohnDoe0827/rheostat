@@ -30,6 +30,14 @@ declare module '@deepseek-ai/dsh-session/types' {
      * log with none folds to {@link DEFAULT_POSITION}.
      */
     'rheostat/position': { position: number }
+    /**
+     * Whether the style dial is on from this point on: log-only,
+     * non-surface, whole-value replace. The last `rheostat/active` wins; a
+     * log with none folds to {@link DEFAULT_ACTIVE}. The dial is on by
+     * default; `/rheostat off` turns it off, and sliding the dial turns it
+     * back on.
+     */
+    'rheostat/active': { active: boolean }
   }
 }
 
@@ -41,6 +49,38 @@ export const inject = ['tools', 'systemPrompt']
 
 /** The dial's neutral middle position used before any `rheostat/position` event. */
 export const DEFAULT_POSITION = 0.5
+
+/** The dial's default state: on. `/rheostat off` turns it off until the next slide. */
+export const DEFAULT_ACTIVE = true
+
+/** The dial's complete per-session state: whether it is on, plus its position. */
+export interface DialState {
+  active: boolean
+  position: number
+}
+
+/** Classify a user-initiated change from the current to the target state. */
+function describeChange(current: DialState, target: DialState): DialChange {
+  if (target.active !== current.active) {
+    return target.active ? { kind: 'on', position: target.position } : { kind: 'off' }
+  }
+  // Same active state: an explicit /rheostat off on an off dial stays an off
+  // change (so the no-op reads "already off"), anything else on an on dial is
+  // a slide, and /rheostat on on an on dial degrades to a no-op slide.
+  return target.active ? { kind: 'slide', position: target.position } : { kind: 'off' }
+}
+
+/** Whether a classified change actually alters the current state. */
+function changeHappens(current: DialState, change: DialChange): boolean {
+  switch (change.kind) {
+    case 'off':
+      return current.active
+    case 'on':
+      return !current.active || change.position !== current.position
+    case 'slide':
+      return change.position !== current.position
+  }
+}
 
 /** Positions at or below this value render the terse 0 mode. */
 export const TERSE_THRESHOLD = 0.25
@@ -147,6 +187,24 @@ export function foldPosition(events: readonly SessionEvent[], end = events.lengt
 }
 
 /**
+ * Whether the dial is on after `events[0, end)`. The last `rheostat/active`
+ * wins; a prefix with none is on ({@link DEFAULT_ACTIVE}).
+ * @param events - the session log or any prefix of it.
+ * @param end - fold `events[0, end)`; defaults to the whole log.
+ * @returns whether the dial is active.
+ */
+export function foldActive(events: readonly SessionEvent[], end = events.length): boolean {
+  let active = DEFAULT_ACTIVE
+  let index = 0
+  for (const event of events) {
+    if (index >= end) break
+    index++
+    if (event.type === 'rheostat/active') active = event.data.active
+  }
+  return active
+}
+
+/**
  * The model-visible style section language: `zh` follows the product's
  * Chinese mode names, `en` renders English guidance and mode names.
  */
@@ -244,16 +302,36 @@ export function detectLanguage(events: readonly SessionEvent[]): StyleLanguage {
   return 'zh'
 }
 
-/** The user-change notice appended to the next request after a `/rheostat` slide. */
-function narration(position: number, language: StyleLanguage): UserMessage {
-  const label = (position <= TERSE_THRESHOLD
+/** One user-initiated dial change, narrated into the next request. */
+type DialChange =
+  | { kind: 'off' }
+  | { kind: 'on'; position: number }
+  | { kind: 'slide'; position: number }
+
+/** The mode band's label in one section language. */
+function bandLabel(position: number, language: StyleLanguage): string {
+  const band = position <= TERSE_THRESHOLD
     ? BANDS.terse
     : position >= EXPRESSIVE_THRESHOLD
       ? BANDS.expressive
-      : BANDS.balanced)[language].label
-  const text = language === 'zh'
-    ? `用户把风格变阻器（滑动变阻器）滑动到了 ${position.toFixed(2)}（${label}）。`
-    : `The user slid the style dial (滑动变阻器) to ${position.toFixed(2)} (${label}).`
+      : BANDS.balanced
+  return band[language].label
+}
+
+/** The user-change notice appended to the next request after a `/rheostat` change. */
+function narration(change: DialChange, language: StyleLanguage): UserMessage {
+  const zh = language === 'zh'
+  const text = change.kind === 'off'
+    ? zh
+      ? '用户关闭了风格变阻器（滑动变阻器）。'
+      : 'The user turned the style dial (滑动变阻器) off.'
+    : change.kind === 'on'
+      ? zh
+        ? `用户开启了风格变阻器（滑动变阻器），位置 ${change.position.toFixed(2)}（${bandLabel(change.position, language)}）。`
+        : `The user turned the style dial (滑动变阻器) on at ${change.position.toFixed(2)} (${bandLabel(change.position, language)}).`
+      : zh
+        ? `用户把风格变阻器（滑动变阻器）滑动到了 ${change.position.toFixed(2)}（${bandLabel(change.position, language)}）。`
+        : `The user slid the style dial (滑动变阻器) to ${change.position.toFixed(2)} (${bandLabel(change.position, language)}).`
   return createUserMessage({
     content: [{ type: 'text', text }],
     source: { kind: 'plugin', plugin: PLUGIN, form: 'notice', summary: text },
@@ -266,24 +344,41 @@ function narration(position: number, language: StyleLanguage): UserMessage {
  * @param ctx - registrant context carrying the tool registry and prompt assembly.
  */
 export function apply(ctx: Context): void {
-  // A user's /rheostat selection made during an open turn, awaiting the next
+  // A user's /rheostat change made during an open turn, awaiting the next
   // accepted in-turn pre-step. The section reads it so the next assembly
   // already renders the new style; the pre-step commits it durably.
-  const pending = new WeakMap<Session, number>()
+  const pending = new WeakMap<Session, DialState>()
 
-  /** The position in force: a pending user selection, else the folded log. */
+  /** The position in force: a pending change, else the folded log. */
   function positionIn(agent: Agent): number {
-    return pending.get(agent.session) ?? foldPosition(agent.session.events)
+    return pending.get(agent.session)?.position ?? foldPosition(agent.session.events)
   }
 
-  /** Append one pending selection before the next request assembly. */
-  function commitPending(session: Session, position: number): void {
-    if (position === foldPosition(session.events)) {
+  /** Whether the dial is on: a pending change, else the folded log. */
+  function activeIn(agent: Agent): boolean {
+    return pending.get(agent.session)?.active ?? foldActive(agent.session.events)
+  }
+
+  /** The full dial state in force, considering any pending change. */
+  function stateIn(agent: Agent): DialState {
+    const pendingState = pending.get(agent.session)
+    return pendingState ?? {
+      active: foldActive(agent.session.events),
+      position: foldPosition(agent.session.events),
+    }
+  }
+
+  /** Append the pending changes that differ from the log, then clear. */
+  function commitPending(session: Session, target: DialState): void {
+    const activeChanged = target.active !== foldActive(session.events)
+    const positionChanged = target.position !== foldPosition(session.events)
+    if (!activeChanged && !positionChanged) {
       pending.delete(session)
       return
     }
-    session.append('rheostat/position', { position })
-    // Delete only after append succeeds so a later accepted in-turn pre-step
+    if (activeChanged) session.append('rheostat/active', { active: target.active })
+    if (positionChanged) session.append('rheostat/position', { position: target.position })
+    // Delete only after appends succeed so a later accepted in-turn pre-step
     // can retry a failed durable write.
     pending.delete(session)
   }
@@ -293,17 +388,24 @@ export function apply(ctx: Context): void {
     next,
   ): Promise<PreStepDecision> => {
     const decision = await next()
-    const position = pending.get(agent.session)
-    if (decision.kind === 'reject' || signal.aborted || position === undefined) return decision
-    const changed = position !== foldPosition(agent.session.events)
+    const target = pending.get(agent.session)
+    if (decision.kind === 'reject' || signal.aborted || target === undefined) return decision
+    // Compare against the durable log, not stateIn: the pending selection is
+    // not yet committed and must not mask the change it represents.
+    const current: DialState = {
+      active: foldActive(agent.session.events),
+      position: foldPosition(agent.session.events),
+    }
+    const change = describeChange(current, target)
+    const changed = changeHappens(current, change)
     try {
-      commitPending(agent.session, position)
+      commitPending(agent.session, target)
     } catch (error) {
-      ctx.logger.warn('dsh-rheostat: failed to append selected position at step start: %o', error)
+      ctx.logger.warn('dsh-rheostat: failed to append selected state at step start: %o', error)
       return decision
     }
     return changed
-      ? { ...decision, messages: [...decision.messages, narration(position, detectLanguage(agent.session.events))] }
+      ? { ...decision, messages: [...decision.messages, narration(change, detectLanguage(agent.session.events))] }
       : decision
   })
 
@@ -312,6 +414,7 @@ export function apply(ctx: Context): void {
     order: SECTION_ORDER,
     text: (context) => {
       if (context.agent === undefined) return ''
+      if (!activeIn(context.agent)) return ''
       return styleText(positionIn(context.agent), detectLanguage(context.agent.session.events))
     },
   })
@@ -320,43 +423,90 @@ export function apply(ctx: Context): void {
   ctx.inject(['commands'], (commandCtx) => {
     commandCtx.commands.register({
       name: 'rheostat',
-      description: 'Slide the style dial (滑动变阻器) between 0 (terse) and 1 (expressive)',
-      input: { hint: '[0..1]' },
+      description: 'Turn the style dial (滑动变阻器) off/on or slide it between 0 (terse) and 1 (expressive)',
+      input: { hint: '[off|on|<0..1>]' },
       handler: ({ agent, rawInput }) => {
-        const input = rawInput.trim()
+        const input = rawInput.trim().toLowerCase()
         if (input === '') {
-          const position = positionIn(agent)
+          const state = stateIn(agent)
+          if (!state.active) {
+            return {
+              kind: 'success',
+              text: 'Style dial (滑动变阻器) is off. Use /rheostat <0..1> or /rheostat on to turn it on.',
+            }
+          }
           return {
             kind: 'success',
-            text: `Style dial (滑动变阻器) at ${position.toFixed(2)} — ${modeLabel(position)}. Use /rheostat <0..1> to slide it.`,
+            text: `Style dial (滑动变阻器) at ${state.position.toFixed(2)} — ${modeLabel(state.position)}. Use /rheostat <0..1> to slide it, /rheostat off to turn it off.`,
           }
         }
-        let position: number
-        try {
-          position = parsePosition(input)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          return { kind: 'error', text: `Invalid dial position: ${message}` }
+        let target: DialState
+        if (input === 'off') {
+          target = { active: false, position: positionIn(agent) }
+        } else if (input === 'on') {
+          target = { active: true, position: positionIn(agent) }
+        } else {
+          let position: number
+          try {
+            position = parsePosition(input)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            return { kind: 'error', text: `Invalid dial position: ${message}` }
+          }
+          target = { active: true, position }
         }
-        const current = positionIn(agent)
-        if (position === current) {
+        const current = stateIn(agent)
+        const change = describeChange(current, target)
+        if (!changeHappens(current, change)) {
+          if (change.kind === 'off') {
+            return { kind: 'success', text: 'Style dial is already off.' }
+          }
+          if (change.kind === 'on') {
+            return {
+              kind: 'success',
+              text: `Style dial is already on at ${current.position.toFixed(2)} — ${modeLabel(current.position)}.`,
+            }
+          }
           return {
             kind: 'success',
-            text: `Style dial is already at ${position.toFixed(2)} — ${modeLabel(position)}.`,
+            text: `Style dial is already at ${current.position.toFixed(2)} — ${modeLabel(current.position)}.`,
           }
         }
         if (hasOpenTurn(agent.session.events)) {
-          pending.set(agent.session, position)
+          pending.set(agent.session, target)
+          if (change.kind === 'off') {
+            return { kind: 'success', text: 'Turning the style dial off (applies from the next step).' }
+          }
+          if (change.kind === 'on') {
+            return {
+              kind: 'success',
+              text: `Turning the style dial on at ${target.position.toFixed(2)} (applies from the next step).`,
+            }
+          }
           return {
             kind: 'success',
-            text: `Sliding the style dial to ${position.toFixed(2)} (applies from the next step).`,
+            text: `Sliding the style dial to ${target.position.toFixed(2)} (applies from the next step).`,
           }
         }
-        agent.session.append('rheostat/position', { position })
-        agent.inject(narration(position, detectLanguage(agent.session.events)))
+        if (target.active !== foldActive(agent.session.events)) {
+          agent.session.append('rheostat/active', { active: target.active })
+        }
+        if (target.position !== foldPosition(agent.session.events)) {
+          agent.session.append('rheostat/position', { position: target.position })
+        }
+        agent.inject(narration(change, detectLanguage(agent.session.events)))
+        if (change.kind === 'off') {
+          return { kind: 'success', text: 'Style dial turned off.' }
+        }
+        if (change.kind === 'on') {
+          return {
+            kind: 'success',
+            text: `Style dial turned on at ${target.position.toFixed(2)} — ${modeLabel(target.position)}.`,
+          }
+        }
         return {
           kind: 'success',
-          text: `Style dial slid to ${position.toFixed(2)} — ${modeLabel(position)}.`,
+          text: `Style dial slid to ${target.position.toFixed(2)} — ${modeLabel(target.position)}.`,
         }
       },
     })
@@ -395,6 +545,11 @@ export function apply(ctx: Context): void {
         throw new Error(`${RHEOSTAT_SET} requires an owning agent session`)
       }
       const position = validatePosition(args.position)
+      // Sliding always turns the dial on: a position is an explicit request
+      // for the style to apply.
+      if (!foldActive(exec.agent.session.events)) {
+        exec.agent.session.append('rheostat/active', { active: true })
+      }
       exec.agent.session.append('rheostat/position', { position })
       return Promise.resolve({ position, mode: modeOf(position) })
     },
@@ -403,30 +558,37 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: RHEOSTAT_GET,
-    description: 'Read the current style dial (滑动变阻器) position of this session, between 0 (terse) '
-      + 'and 1 (expressive). The prompt section already states it; use this when you need the position '
-      + 'programmatically.',
+    description: 'Read the current style dial (滑动变阻器) state of this session: whether it is on, its '
+      + 'position between 0 (terse) and 1 (expressive), and the mode. The prompt section already states '
+      + 'the position; use this when you need the state programmatically.',
     parameters: {},
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
+          active: { type: 'boolean', required: true },
           position: { type: 'number', required: true },
           mode: { type: 'string', required: true, enum: ['terse', 'balanced', 'expressive'] },
         },
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Style dial at ${value.position.toFixed(2)} — ${modeLabel(value.position)}.`,
+        text: value.active
+          ? `Style dial at ${value.position.toFixed(2)} — ${modeLabel(value.position)}.`
+          : 'Style dial is off.',
       }],
     },
     execute(_args, exec) {
       if (exec.agent === undefined) {
         throw new Error(`${RHEOSTAT_GET} requires an owning agent session`)
       }
-      const position = positionIn(exec.agent)
-      return Promise.resolve({ position, mode: modeOf(position) })
+      const state = stateIn(exec.agent)
+      return Promise.resolve({
+        active: state.active,
+        position: state.position,
+        mode: modeOf(state.position),
+      })
     },
     presentCall: () => ({ card: 'generic', title: 'Read style dial', kind: 'other' }),
   }))

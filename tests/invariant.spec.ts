@@ -39,6 +39,21 @@ describe('style-dial invariants', () => {
     expect(() => { ctx.emit('session/event', {} as Session, event(position)) }).toThrow(message)
   })
 
+  it.each([
+    ['string', 'yes', /must carry a boolean/],
+    ['number', 1, /must carry a boolean/],
+    ['null', null, /must carry a boolean/],
+  ])('rejects an incoherent durable active state (%s)', async (_label, active, message) => {
+    const ctx = await setup()
+    const bad = { type: 'rheostat/active', seq: 0, time: 0, data: { active } } as SessionEvent
+    expect(() => { ctx.emit('session/event', {} as Session, bad) }).toThrow(message)
+  })
+
+  it('accepts boolean active states', async () => {
+    const ctx = await setup()
+    expect(() => { ctx.emit('session/event', {} as Session, { type: 'rheostat/active', seq: 0, time: 0, data: { active: false } } as SessionEvent) }).not.toThrow()
+  })
+
   it('ignores unrelated dispatches and session events', async () => {
     const ctx = await setup()
     expect(() => {

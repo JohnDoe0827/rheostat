@@ -108,7 +108,7 @@ describe('dsh-rheostat real Loader composition through cordis.yml', () => {
     const read = await ctx.commands.execute(owner, '/rheostat', [], signal)
     expect(read?.result).toEqual({
       kind: 'success',
-      text: 'Style dial (滑动变阻器) at 1.00 — 1 模式 · 饱满热烈. Use /rheostat <0..1> to slide it.',
+      text: 'Style dial (滑动变阻器) at 1.00 — 1 模式 · 饱满热烈. Use /rheostat <0..1> to slide it, /rheostat off to turn it off.',
     })
   }, 30_000)
 })
