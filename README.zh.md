@@ -58,13 +58,3 @@ npm run build   # tsc → lib/
 npm test        # vitest：单元 + invariant + 真实 Loader 组合 + 全循环 mock 模型
 ```
 
-## 发布到 npm（维护者）
-
-有了拥有 `@deepseek-ai` scope 权限的 npm 账号后：
-
-```sh
-npm login
-npm publish
-```
-
-发布后 `npm install @johndoe0827/dsh-rheostat` 即可在任何地方使用。合并进 `deepseek-ai/deepseek-harness` 的上游进度见 `feat/dsh-rheostat` 的 pull request。

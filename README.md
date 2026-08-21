@@ -58,13 +58,3 @@ npm run build   # tsc → lib/
 npm test        # vitest: unit + invariant + real-Loader composition + full-loop mock-model
 ```
 
-## Publishing to npm (maintainers)
-
-Once an npm account with access to the `@deepseek-ai` scope is available:
-
-```sh
-npm login
-npm publish
-```
-
-After publishing, `npm install @johndoe0827/dsh-rheostat` works anywhere. The upstream merge into `deepseek-ai/deepseek-harness` is tracked in the pull request for `feat/dsh-rheostat`.
