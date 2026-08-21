@@ -156,10 +156,38 @@ describe('style dial state', () => {
     expect(() => rheostat.parsePosition('1.5')).toThrow('between 0 and 1')
   })
 
-  it('renders the band-appropriate style section text', () => {
+  it('renders the band-appropriate style section text in both languages', () => {
     expect(rheostat.styleText(0)).toContain('0 模式 · 极简静默')
     expect(rheostat.styleText(0.5)).toContain('0 与 1 之间 · 均衡')
     expect(rheostat.styleText(1)).toContain('1 模式 · 饱满热烈')
+    expect(rheostat.styleText(0, 'en')).toContain('0 mode · Terse & Quiet')
+    expect(rheostat.styleText(0.5, 'en')).toContain('Balanced (between 0 and 1)')
+    expect(rheostat.styleText(1, 'en')).toContain('1 mode · Expressive & Lively')
+    expect(rheostat.styleText(1, 'en')).not.toContain('极简')
+  })
+
+  it('detects the conversation language from recent user messages', () => {
+    const session = Session.create(SessionId('detect'))
+    expect(rheostat.detectLanguage(session.events)).toBe('zh')
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'What do you think about peanuts?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    expect(rheostat.detectLanguage(session.events)).toBe('en')
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '那你觉得花生怎么样？' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    expect(rheostat.detectLanguage(session.events)).toBe('zh')
+  })
+
+  it('ignores plugin-sourced messages when detecting the language', () => {
+    const session = Session.create(SessionId('detect-plugin'))
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'The user slid the style dial (滑动变阻器) to 1.00.' }],
+      source: { kind: 'plugin', plugin: 'rheostat', form: 'notice', summary: 'style dial slid' },
+    }), { surfaceOp: 'append' })
+    expect(rheostat.detectLanguage(session.events)).toBe('zh')
   })
 
   it('detects an open turn from the log brackets', () => {
@@ -192,6 +220,20 @@ describe('prompt section', () => {
     const assembled = await assembleFor(ctx, agent)
     const section = assembled.sections.find(s => s.name === rheostat.SECTION_NAME)
     expect(section?.text).toContain('1 模式 · 饱满热烈')
+  })
+
+  it('renders the English section when the conversation is English', async () => {
+    const ctx = await setup()
+    const agent = await agentWithSession(ctx, 'section-en')
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'What do you think about peanuts?' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    agent.session.append('rheostat/position', { position: 0 })
+    const assembled = await assembleFor(ctx, agent)
+    const section = assembled.sections.find(s => s.name === rheostat.SECTION_NAME)
+    expect(section?.text).toContain('0 mode · Terse & Quiet')
+    expect(section?.text).not.toContain('极简')
   })
 })
 
@@ -337,7 +379,18 @@ describe('/rheostat', () => {
       text: 'Style dial slid to 1.00 — 1 模式 · 饱满热烈.',
     })
     expect(positions(agent.session)).toEqual([1])
-    expect(pluginNotices(agent.session)).toEqual(['The user slid the style dial (滑动变阻器) to 1.00 (1 模式 · 饱满热烈).'])
+    expect(pluginNotices(agent.session)).toEqual(['用户把风格变阻器（滑动变阻器）滑动到了 1.00（1 模式 · 饱满热烈）。'])
+  })
+
+  it('narrates in English when the conversation is English', async () => {
+    const ctx = await setupWithCommands()
+    const agent = await agentWithSession(ctx, 'command-en')
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Keep it short please.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    await ctx.commands.execute(agent, '/rheostat 1', [], testSignal)
+    expect(pluginNotices(agent.session)).toEqual(['The user slid the style dial (滑动变阻器) to 1.00 (1 mode · Expressive & Lively).'])
   })
 
   it('queues during an open turn, commits at the next accepted pre-step, and narrates into the request', async () => {
@@ -356,7 +409,7 @@ describe('/rheostat', () => {
 
     await boundary(ctx, agent, 'step-start')
     expect(positions(agent.session)).toEqual([0])
-    expect(pluginNotices(agent.session)).toEqual(['The user slid the style dial (滑动变阻器) to 0.00 (0 模式 · 极简静默).'])
+    expect(pluginNotices(agent.session)).toEqual(['用户把风格变阻器（滑动变阻器）滑动到了 0.00（0 模式 · 极简静默）。'])
   })
 
   it('a later /rheostat replaces an earlier queued selection, and a selection matching the committed position cancels silently', async () => {

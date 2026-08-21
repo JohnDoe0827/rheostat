@@ -147,31 +147,113 @@ export function foldPosition(events: readonly SessionEvent[], end = events.lengt
 }
 
 /**
+ * The model-visible style section language: `zh` follows the product's
+ * Chinese mode names, `en` renders English guidance and mode names.
+ */
+export type StyleLanguage = 'zh' | 'en'
+
+/** One mode band's label and guidance in both section languages. */
+interface BandText {
+  readonly zh: { label: string; guidance: string }
+  readonly en: { label: string; guidance: string }
+}
+
+const BANDS: Readonly<Record<'terse' | 'balanced' | 'expressive', BandText>> = {
+  terse: {
+    zh: {
+      label: '0 模式 · 极简静默',
+      guidance: '调整回答风格：只给结论，不给铺垫；能用一句话绝不用两句；删掉寒暄、修饰与重复；列表尽量短。像 0 一样安静、克制、留白。',
+    },
+    en: {
+      label: '0 mode · Terse & Quiet',
+      guidance: 'Adjust your response style: give conclusions only, no buildup; one sentence where two would do; drop pleasantries, ornament, and repetition; keep lists as short as possible. Be as quiet, restrained, and reserved as 0.',
+    },
+  },
+  balanced: {
+    zh: {
+      label: '0 与 1 之间 · 均衡',
+      guidance: '调整回答风格：按比例混合两种模式，靠近 0 则简洁克制，靠近 1 则饱满热烈；当前以均衡为主，视内容需要微调。',
+    },
+    en: {
+      label: 'Balanced (between 0 and 1)',
+      guidance: 'Adjust your response style by blending the two modes proportionally: lean terse near 0 and expressive near 1; right now you are balanced — fine-tune as the content requires.',
+    },
+  },
+  expressive: {
+    zh: {
+      label: '1 模式 · 饱满热烈',
+      guidance: '调整回答风格：尽情展开；主动补充背景、细节和例子；表达有温度、有存在感；可以热情、夸张、有节奏；把每个想法点亮，绝不缺席。像 1 一样明亮、响亮、内容丰富。',
+    },
+    en: {
+      label: '1 mode · Expressive & Lively',
+      guidance: 'Adjust your response style: expand freely; add background, detail, and examples unprompted; be warm and present; enthusiasm, emphasis, and rhythm are welcome; light up every thought and never go missing. Be as bright, loud, and rich as 1.',
+    },
+  },
+}
+
+/** The closing sentence telling how the dial can be moved, per language. */
+function dialTail(language: StyleLanguage): string {
+  return language === 'zh'
+    ? '用户可以用 /rheostat <0..1> 滑动它，你也可以调用 rheostat_set 工具。'
+    : 'The user can slide it with /rheostat <0..1>, and you can call the rheostat_set tool.'
+}
+
+/**
  * The model-visible style section for one position: the dial reading plus the
- * style instruction for the current mode band.
+ * style instruction for the current mode band, in the conversation's language.
  * @param position - a validated dial position in [0, 1].
+ * @param language - section language; defaults to `zh`.
  * @returns the section text rendered at each assembly.
  */
-export function styleText(position: number): string {
+export function styleText(position: number, language: StyleLanguage = 'zh'): string {
   const rounded = position.toFixed(2)
-  if (position <= TERSE_THRESHOLD) {
-    return `滑动变阻器（style dial）位于 ${rounded}，处于 0 模式 · 极简静默。`
-      + ' 调整回答风格：只给结论，不给铺垫；能用一句话绝不用两句；删掉寒暄、修饰与重复；列表尽量短。'
-      + ' 像 0 一样安静、克制、留白。用户可以用 /rheostat <0..1> 滑动它，你也可以调用 rheostat_set 工具。'
+  const band = position <= TERSE_THRESHOLD
+    ? BANDS.terse
+    : position >= EXPRESSIVE_THRESHOLD
+      ? BANDS.expressive
+      : BANDS.balanced
+  const text = band[language]
+  const head = language === 'zh'
+    ? `滑动变阻器（style dial）位于 ${rounded}，处于 ${text.label}。`
+    : `The style dial (滑动变阻器) is at ${rounded} — ${text.label}.`
+  return `${head} ${text.guidance} ${dialTail(language)}`
+}
+
+/**
+ * Detect the conversation language from recent user-authored messages.
+ * Scans backwards until roughly 40 letters or CJK characters accumulate;
+ * a CJK share of 30% or more classifies as `zh`, otherwise `en`. Sessions
+ * with no user-authored message yet (the first turn's assembly runs before
+ * the current message is logged) fall back to `zh`.
+ * @param events - the session log.
+ * @returns the detected section language.
+ */
+export function detectLanguage(events: readonly SessionEvent[]): StyleLanguage {
+  for (const event of [...events].reverse()) {
+    if (event.type !== 'user/message') continue
+    if (event.data.source.kind !== 'user') continue
+    const text = event.data.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('')
+    const cjk = (text.match(/[\u4e00-\u9fff]/g) ?? []).length
+    const latin = (text.match(/[A-Za-z]/g) ?? []).length
+    if (cjk === 0 && latin === 0) continue
+    return cjk >= latin / 2 ? 'zh' : 'en'
   }
-  if (position >= EXPRESSIVE_THRESHOLD) {
-    return `滑动变阻器（style dial）位于 ${rounded}，处于 1 模式 · 饱满热烈。`
-      + ' 调整回答风格：尽情展开；主动补充背景、细节和例子；表达有温度、有存在感；可以热情、夸张、有节奏；把每个想法点亮，绝不缺席。'
-      + ' 像 1 一样明亮、响亮、内容丰富。用户可以用 /rheostat <0..1> 滑动它，你也可以调用 rheostat_set 工具。'
-  }
-  return `滑动变阻器（style dial）位于 ${rounded}，处于 0 与 1 之间 · 均衡。`
-    + ' 调整回答风格：按比例混合两种模式，靠近 0 则简洁克制，靠近 1 则饱满热烈；当前以均衡为主，视内容需要微调。'
-    + ' 用户可以用 /rheostat <0..1> 滑动它，你也可以调用 rheostat_set 工具。'
+  return 'zh'
 }
 
 /** The user-change notice appended to the next request after a `/rheostat` slide. */
-function narration(position: number): UserMessage {
-  const text = `The user slid the style dial (滑动变阻器) to ${position.toFixed(2)} (${modeLabel(position)}).`
+function narration(position: number, language: StyleLanguage): UserMessage {
+  const label = (position <= TERSE_THRESHOLD
+    ? BANDS.terse
+    : position >= EXPRESSIVE_THRESHOLD
+      ? BANDS.expressive
+      : BANDS.balanced)[language].label
+  const text = language === 'zh'
+    ? `用户把风格变阻器（滑动变阻器）滑动到了 ${position.toFixed(2)}（${label}）。`
+    : `The user slid the style dial (滑动变阻器) to ${position.toFixed(2)} (${label}).`
   return createUserMessage({
     content: [{ type: 'text', text }],
     source: { kind: 'plugin', plugin: PLUGIN, form: 'notice', summary: text },
@@ -221,7 +303,7 @@ export function apply(ctx: Context): void {
       return decision
     }
     return changed
-      ? { ...decision, messages: [...decision.messages, narration(position)] }
+      ? { ...decision, messages: [...decision.messages, narration(position, detectLanguage(agent.session.events))] }
       : decision
   })
 
@@ -230,7 +312,7 @@ export function apply(ctx: Context): void {
     order: SECTION_ORDER,
     text: (context) => {
       if (context.agent === undefined) return ''
-      return styleText(positionIn(context.agent))
+      return styleText(positionIn(context.agent), detectLanguage(context.agent.session.events))
     },
   })
 
@@ -271,7 +353,7 @@ export function apply(ctx: Context): void {
           }
         }
         agent.session.append('rheostat/position', { position })
-        agent.inject(narration(position))
+        agent.inject(narration(position, detectLanguage(agent.session.events)))
         return {
           kind: 'success',
           text: `Style dial slid to ${position.toFixed(2)} — ${modeLabel(position)}.`,
