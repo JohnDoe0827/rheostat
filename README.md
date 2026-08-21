@@ -31,12 +31,16 @@ It injects `tools` and `systemPrompt`; the `/rheostat` command activates when a 
 
 | Control | Effect |
 | --- | --- |
-| `/rheostat` | read the current position |
+| `/rheostat` | read the current state |
+| `/rheostat off` | turn the dial off (no style instructions) |
+| `/rheostat on` | turn it back on at the last position |
 | `/rheostat 0` | switch to 0 mode (terse, quiet) |
 | `/rheostat 1` | switch to 1 mode (expressive, lively) |
 | `/rheostat 0.7` | blend, leaning expressive |
-| `rheostat_set(position)` | model slides the dial (0..1) |
-| `rheostat_get()` | model reads the dial programmatically |
+| `rheostat_set(position)` | model slides the dial (0..1) — auto-enables |
+| `rheostat_get()` | model reads the state programmatically |
+
+Sliding the dial (command or tool) always turns it on; `/rheostat off` turns it off until the next slide.
 
 Mode bands: position ≤ 0.25 renders 0 mode · Terse & Quiet; position ≥ 0.75 renders 1 mode · Expressive & Lively; in between renders Balanced (between 0 and 1).
 

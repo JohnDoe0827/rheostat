@@ -31,12 +31,16 @@ npm install @johndoe0827/dsh-rheostat
 
 | 控制 | 效果 |
 | --- | --- |
-| `/rheostat` | 读取当前位置 |
+| `/rheostat` | 读取当前状态 |
+| `/rheostat off` | 关闭变阻器（不再注入风格指令） |
+| `/rheostat on` | 按上次位置重新开启 |
 | `/rheostat 0` | 切换到 0 模式（极简静默） |
 | `/rheostat 1` | 切换到 1 模式（饱满热烈） |
 | `/rheostat 0.7` | 混合，偏向饱满 |
-| `rheostat_set(position)` | 模型滑动变阻器（0..1） |
-| `rheostat_get()` | 模型以编程方式读取 |
+| `rheostat_set(position)` | 模型滑动变阻器（0..1）——自动开启 |
+| `rheostat_get()` | 模型以编程方式读取状态 |
+
+滑动变阻器（命令或工具）都会自动开启；`/rheostat off` 关闭后直到下一次滑动才重新生效。
 
 模式区间：位置 ≤ 0.25 渲染 0 模式 · 极简静默；位置 ≥ 0.75 渲染 1 模式 · 饱满热烈；中间渲染 0 与 1 之间 · 均衡。
 
